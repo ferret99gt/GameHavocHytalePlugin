@@ -42,6 +42,7 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
   private final AtomicBoolean tickLogged = new AtomicBoolean(false);
   private final AtomicBoolean changeLogged = new AtomicBoolean(false);
   private final AtomicBoolean probeLogged = new AtomicBoolean(false);
+  private float timeAccumulator;
 
   HydrationTaleSystem(HytaleLogger logger)
   {
@@ -63,6 +64,13 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
   public void tick(float delta, int index, ArchetypeChunk<ChunkStore> chunk, Store<ChunkStore> store,
       CommandBuffer<ChunkStore> commandBuffer)
   {
+    timeAccumulator += delta;
+    if (timeAccumulator < 1.0f)
+    {
+      return;
+    }
+    timeAccumulator = 0.0f;
+
     if (logger != null && tickLogged.compareAndSet(false, true))
     {
       logger.at(Level.FINEST).log("HydrationTale: HydrationTaleSystem ticking.");
