@@ -1,6 +1,7 @@
 # GameHavocHytalePlugin
 
 GameHavocHytalePlugin is a small collection of Hytale server tweaks and fixes for the GameHavoc community server.
+
 It ships as a single plugin but contains multiple sub-systems.
 
 ## Modules
@@ -49,14 +50,13 @@ Currently the threshold is set in code (see `REQUIRED_SLEEP_FRACTION`).
 1. Build the jar:
 
 ```
-cd d:\Code\GameHavocHytalePlugin
 mvn -DskipTests package
 ```
 
 2. Copy the output jar to your server mods folder:
 
 ```
-D:\Games\Hytale Servers\gamehavoc\Server\mods
+..\Server\mods
 ```
 
 3. Restart the server.
@@ -75,7 +75,3 @@ GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/HydrationTaleSyste
 ```
 GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/SleepyTaleSystem.java
 ```
-
-## License
-
-Unspecified. Add one if you plan to distribute.

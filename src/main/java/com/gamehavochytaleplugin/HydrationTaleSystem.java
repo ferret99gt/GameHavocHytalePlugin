@@ -137,11 +137,9 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
       String soilKey = soilType == null ? "null" : soilType.getId();
       int altWorldX = (worldChunk.getX() << ChunkUtil.BITS) + localX;
       int altWorldZ = (worldChunk.getZ() << ChunkUtil.BITS) + localZ;
-      logger.at(Level.FINEST).log(
-          "HydrationTale: probe at %d,%d,%d water=%s ids=[W:%d E:%d N:%d S:%d] waterIds=%s",
-          worldX, worldY, worldZ, hasWater, westId, eastId, northId, southId, waterFluidIds);
-      logger.at(Level.FINEST).log(
-          "HydrationTale: probe coords chunkX=%d chunkZ=%d local=%d,%d altWorld=%d,%d soil=%s(%d)",
+      logger.at(Level.FINEST).log("HydrationTale: probe at %d,%d,%d water=%s ids=[W:%d E:%d N:%d S:%d] waterIds=%s", worldX,
+          worldY, worldZ, hasWater, westId, eastId, northId, southId, waterFluidIds);
+      logger.at(Level.FINEST).log("HydrationTale: probe coords chunkX=%d chunkZ=%d local=%d,%d altWorld=%d,%d soil=%s(%d)",
           worldChunk.getX(), worldChunk.getZ(), localX, localZ, altWorldX, altWorldZ, soilKey, soilId);
       logNeighborDetail(commandBuffer, store.getExternalData(), worldX, worldY, worldZ - 1, "N");
     }
@@ -195,13 +193,13 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
         }
       });
       soil.setExternalWater(hasWater);
-      logger.at(Level.FINEST).log("HydrationTale: state change at %d,%d,%d water=%s id %d->%d key %s->%s", worldX, worldY, worldZ,
-          hasWater, currentBlockId, nextBlockId, currentBlockType.getId(), nextBlockKey);
+      logger.at(Level.FINEST).log("HydrationTale: state change at %d,%d,%d water=%s id %d->%d key %s->%s", worldX, worldY,
+          worldZ, hasWater, currentBlockId, nextBlockId, currentBlockType.getId(), nextBlockKey);
     }
     else if (previousExternalWater != hasWater)
     {
-      logger.at(Level.FINEST).log("HydrationTale: no state change at %d,%d,%d water=%s id=%d key=%s computed=%s", worldX, worldY,
-          worldZ, hasWater, currentBlockId, currentBlockType.getId(), nextBlockKey);
+      logger.at(Level.FINEST).log("HydrationTale: no state change at %d,%d,%d water=%s id=%d key=%s computed=%s", worldX,
+          worldY, worldZ, hasWater, currentBlockId, currentBlockType.getId(), nextBlockKey);
     }
 
     if (previousExternalWater != hasWater)
@@ -315,9 +313,8 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
     int blockId = chunk.getBlock(localX, worldY, localZ);
     BlockType blockType = blockTypeMap.getAsset(blockId);
     String blockKey = blockType == null ? "null" : blockType.getId();
-    logger.at(Level.FINEST).log(
-        "HydrationTale: %s detail at %d,%d,%d blockId=%d blockKey=%s fluidId=%d fluidLevel=%d",
-        label, worldX, worldY, worldZ, blockId, blockKey, fluidId, fluidLevel);
+    logger.at(Level.FINEST).log("HydrationTale: %s detail at %d,%d,%d blockId=%d blockKey=%s fluidId=%d fluidLevel=%d", label,
+        worldX, worldY, worldZ, blockId, blockKey, fluidId, fluidLevel);
   }
 
   private Instant getGameTime(World world)

@@ -82,8 +82,8 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     }
     if (readyPlayers != lastReadyPlayers || totalPlayers != lastTotalPlayers || requiredPlayers != lastRequiredPlayers)
     {
-      world.sendMessage(Message.raw(String.format("SleepyTale: %d/%d players sleeping (min %d).",
-          readyPlayers, totalPlayers, requiredPlayers)));
+      world.sendMessage(Message
+          .raw(String.format("SleepyTale: %d/%d players sleeping (min %d).", readyPlayers, totalPlayers, requiredPlayers)));
       lastReadyPlayers = readyPlayers;
       lastTotalPlayers = totalPlayers;
       lastRequiredPlayers = requiredPlayers;
