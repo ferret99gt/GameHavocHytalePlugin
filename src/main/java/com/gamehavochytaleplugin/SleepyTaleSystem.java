@@ -10,6 +10,7 @@ import com.hypixel.hytale.builtin.beds.sleep.systems.world.StartSlumberSystem;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.system.DelayedSystem;
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.modules.time.WorldTimeResource;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
@@ -27,6 +28,11 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
   static final double REQUIRED_SLEEP_FRACTION = 0.5d; // 50% of players
 
   private final HytaleLogger logger;
+  private int lastReadyPlayers = -1;
+  private int lastTotalPlayers = -1;
+  private int lastRequiredPlayers = -1;
+  private boolean lastMinMet;
+  private boolean initialized;
 
   SleepyTaleSystem(HytaleLogger logger)
   {
@@ -42,6 +48,11 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     Collection<PlayerRef> players = world.getPlayerRefs();
     if (players.isEmpty())
     {
+      lastReadyPlayers = -1;
+      lastTotalPlayers = -1;
+      lastRequiredPlayers = -1;
+      lastMinMet = false;
+      initialized = false;
       return;
     }
 
@@ -60,7 +71,30 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     int totalPlayers = players.size();
     int readyPlayers = countReadyPlayers(store, players);
     int requiredPlayers = computeRequiredPlayers(totalPlayers);
-    if (readyPlayers < requiredPlayers)
+    boolean minMet = readyPlayers >= requiredPlayers;
+    if (!initialized)
+    {
+      lastReadyPlayers = readyPlayers;
+      lastTotalPlayers = totalPlayers;
+      lastRequiredPlayers = requiredPlayers;
+      lastMinMet = minMet;
+      initialized = true;
+    }
+    if (readyPlayers != lastReadyPlayers || totalPlayers != lastTotalPlayers || requiredPlayers != lastRequiredPlayers)
+    {
+      world.sendMessage(Message.raw(String.format("SleepyTale: %d/%d players sleeping (min %d).",
+          readyPlayers, totalPlayers, requiredPlayers)));
+      lastReadyPlayers = readyPlayers;
+      lastTotalPlayers = totalPlayers;
+      lastRequiredPlayers = requiredPlayers;
+    }
+    if (minMet && !lastMinMet)
+    {
+      world.sendMessage(Message.raw("SleepyTale: The minimum players for sleeping has been met, good night everyone."));
+    }
+    lastMinMet = minMet;
+
+    if (!minMet)
     {
       return;
     }
