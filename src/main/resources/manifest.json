@@ -1,0 +1,6 @@
+{
+  "Group": "gamehavoc",
+  "Name": "GameHavocHytalePlugin",
+  "Version": "0.1.0",
+  "Main": "com.gamehavochytaleplugin.GameHavocHytalePlugin"
+}

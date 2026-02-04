@@ -1,0 +1,24 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.gamehavoc.hytaleplugin</groupId>
+  <artifactId>GameHavocHytalePlugin</artifactId>
+  <version>0.1.0</version>
+  <name>GameHavocHytalePlugin</name>
+
+  <properties>
+    <maven.compiler.release>25</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.hypixel.hytale</groupId>
+      <artifactId>HytaleServer</artifactId>
+      <version>0.0.0</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/lib/HytaleServer.jar</systemPath>
+    </dependency>
+  </dependencies>
+</project>
