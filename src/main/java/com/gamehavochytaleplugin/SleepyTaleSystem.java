@@ -25,7 +25,7 @@ import java.util.logging.Level;
 final class SleepyTaleSystem extends DelayedSystem<EntityStore>
 {
   static final float CHECK_INTERVAL_SEC = 0.3f;
-  static final double REQUIRED_SLEEP_FRACTION = 0.5d; // 50% of players
+  static final double REQUIRED_SLEEP_FRACTION = 0.1d; // 50% of players
 
   private final HytaleLogger logger;
   private int lastReadyPlayers = -1;
@@ -33,6 +33,7 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
   private int lastRequiredPlayers = -1;
   private boolean lastMinMet;
   private boolean initialized;
+  private boolean pendingCleanup;
 
   SleepyTaleSystem(HytaleLogger logger)
   {
@@ -63,6 +64,14 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
 
     WorldSomnolence somnolence = store.getResource(WorldSomnolence.getResourceType());
     WorldSleep state = somnolence.getState();
+    if (pendingCleanup && state == com.hypixel.hytale.builtin.beds.sleep.resources.WorldSleep.Awake.INSTANCE)
+    {
+      for (PlayerRef player : players)
+      {
+        store.putComponent(player.getReference(), PlayerSomnolence.getComponentType(), PlayerSomnolence.AWAKE);
+      }
+      pendingCleanup = false;
+    }
     if (state != com.hypixel.hytale.builtin.beds.sleep.resources.WorldSleep.Awake.INSTANCE)
     {
       return;
@@ -105,12 +114,12 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     Instant target = computeWakeupInstant(start, wakeUpHour);
     float irlSeconds = computeIrlSeconds(start, target);
 
-    somnolence.setState(new WorldSlumber(start, target, irlSeconds));
-    store.forEachEntityParallel(PlayerSomnolence.getComponentType(), (entityIndex, chunk, commandBuffer) ->
+    for (PlayerRef player : players)
     {
-      var ref = chunk.getReferenceTo(entityIndex);
-      commandBuffer.putComponent(ref, PlayerSomnolence.getComponentType(), Slumber.createComponent(timeResource));
-    });
+      store.putComponent(player.getReference(), PlayerSomnolence.getComponentType(), Slumber.createComponent(timeResource));
+    }
+    somnolence.setState(new WorldSlumber(start, target, irlSeconds));
+    pendingCleanup = true;
 
     logger.at(Level.INFO).log("SleepyTale: slumber started (%d/%d ready, required=%d)", readyPlayers, totalPlayers,
         requiredPlayers);
