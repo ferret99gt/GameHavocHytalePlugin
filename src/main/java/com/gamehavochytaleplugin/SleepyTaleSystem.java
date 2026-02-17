@@ -25,7 +25,7 @@ import java.util.logging.Level;
 final class SleepyTaleSystem extends DelayedSystem<EntityStore>
 {
   static final float CHECK_INTERVAL_SEC = 0.3f;
-  static final double REQUIRED_SLEEP_FRACTION = 0.1d; // 50% of players
+  static final double REQUIRED_SLEEP_FRACTION = 0.1d; // 10% of players
 
   private final HytaleLogger logger;
   private int lastReadyPlayers = -1;
@@ -89,14 +89,17 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
       lastMinMet = minMet;
       initialized = true;
     }
-    if (readyPlayers != lastReadyPlayers || totalPlayers != lastTotalPlayers || requiredPlayers != lastRequiredPlayers)
+    boolean firstSleeperAnnouncement = readyPlayers == 1
+        && (readyPlayers != lastReadyPlayers || totalPlayers != lastTotalPlayers || requiredPlayers != lastRequiredPlayers);
+    if (firstSleeperAnnouncement)
     {
       world.sendMessage(Message
-          .raw(String.format("SleepyTale: %d/%d players sleeping (min %d).", readyPlayers, totalPlayers, requiredPlayers)));
-      lastReadyPlayers = readyPlayers;
-      lastTotalPlayers = totalPlayers;
-      lastRequiredPlayers = requiredPlayers;
+          .raw(String.format("SleepyTale: %d/%d players sleeping (%d required to force sleep).", readyPlayers,
+              totalPlayers, requiredPlayers)));
     }
+    lastReadyPlayers = readyPlayers;
+    lastTotalPlayers = totalPlayers;
+    lastRequiredPlayers = requiredPlayers;
     if (minMet && !lastMinMet)
     {
       world.sendMessage(Message.raw("SleepyTale: The minimum players for sleeping has been met, good night everyone."));

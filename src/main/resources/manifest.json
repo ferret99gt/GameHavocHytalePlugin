@@ -2,5 +2,6 @@
   "Group": "gamehavoc",
   "Name": "GameHavocHytalePlugin",
   "Version": "0.1.0",
-  "Main": "com.gamehavochytaleplugin.GameHavocHytalePlugin"
+  "Main": "com.gamehavochytaleplugin.GameHavocHytalePlugin",
+  "ServerVersion": "2026.02.17-255364b8e"
 }
