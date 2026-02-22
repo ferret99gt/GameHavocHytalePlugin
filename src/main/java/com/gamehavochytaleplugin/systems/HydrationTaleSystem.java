@@ -1,4 +1,4 @@
-package com.gamehavochytaleplugin;
+package com.gamehavochytaleplugin.systems;
 
 import com.hypixel.hytale.builtin.adventure.farming.states.TilledSoilBlock;
 import com.hypixel.hytale.component.Archetype;
@@ -27,7 +27,7 @@ import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
-final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
+public final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
 {
   static final String[] DEFAULT_FLUID_KEYS =
   { "Water", "Water_Source", "Water_Finite" };
@@ -45,7 +45,7 @@ final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
   private final AtomicBoolean probeLogged = new AtomicBoolean(false);
   private float timeAccumulator;
 
-  HydrationTaleSystem(HytaleLogger logger)
+  public HydrationTaleSystem(HytaleLogger logger)
   {
     this.logger = logger;
     this.blockStateInfoType = BlockModule.get().getBlockStateInfoComponentType();

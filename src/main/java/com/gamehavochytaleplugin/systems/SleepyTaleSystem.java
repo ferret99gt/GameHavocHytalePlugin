@@ -1,4 +1,4 @@
-package com.gamehavochytaleplugin;
+package com.gamehavochytaleplugin.systems;
 
 import com.hypixel.hytale.builtin.beds.sleep.components.PlayerSomnolence;
 import com.hypixel.hytale.builtin.beds.sleep.components.PlayerSleep.Slumber;
@@ -22,7 +22,7 @@ import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
-final class SleepyTaleSystem extends DelayedSystem<EntityStore>
+public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
 {
   static final float CHECK_INTERVAL_SEC = 0.3f;
   static final double REQUIRED_SLEEP_FRACTION = 0.1d; // 10% of players
@@ -35,7 +35,7 @@ final class SleepyTaleSystem extends DelayedSystem<EntityStore>
   private boolean initialized;
   private boolean pendingCleanup;
 
-  SleepyTaleSystem(HytaleLogger logger)
+  public SleepyTaleSystem(HytaleLogger logger)
   {
     super(CHECK_INTERVAL_SEC);
     this.logger = logger;

@@ -15,7 +15,14 @@ public final class GameHavocHytalePlugin extends JavaPlugin
   protected void setup()
   {
     getLogger().at(Level.INFO).log("GameHavocHytalePlugin: setup()");
-    getChunkStoreRegistry().registerSystem(new HydrationTaleSystem(getLogger()));
-    getEntityStoreRegistry().registerSystem(new SleepyTaleSystem(getLogger()));
+    registerSubPlugin(new HydrationTaleSubPlugin(getLogger()));
+    registerSubPlugin(new SleepyTaleSubPlugin(getLogger()));
+    registerSubPlugin(new IsekaiTaleSubPlugin(getLogger()));
+  }
+
+  private void registerSubPlugin(GameHavocSubPlugin subPlugin)
+  {
+    getLogger().at(Level.INFO).log("GameHavocHytalePlugin: enabling subplugin " + subPlugin.name());
+    subPlugin.setup(this);
   }
 }

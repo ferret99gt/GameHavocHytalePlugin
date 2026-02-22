@@ -45,6 +45,31 @@ This mirrors the built-in water check, but it runs independently of crop growth.
 Allows night to pass when a configurable percentage of players are in bed, rather than requiring all players.
 Currently the threshold is set in code (see `REQUIRED_SLEEP_FRACTION`).
 
+### IsekaiTale
+
+Separates player inventories between persistent worlds and enforces the destination world's default gamemode on transfer.
+
+This is intended for setups like:
+
+- Adventure world + Creative build world on the same server
+- Portal-connected "hub" worlds
+- Future world resets/migrations without carrying items across worlds
+
+#### What it does
+
+- Detects persistent world transfers using server events (no polling).
+- Stashes the player's inventory layout for the world they are leaving.
+- Clears inventory during transfer.
+- Restores the exact saved layout (hotbar, armor, utility/tools, backpack) for the destination world, if one exists.
+- Applies the destination world's default gamemode (for example, Adventure vs Creative).
+
+#### Important behavior
+
+- Temporary instance worlds (names starting with `instance-`) are ignored.
+  - This preserves normal adventure-instance behavior (Forgotten Temple, Windrider Valley, etc.).
+- Login does not trigger inventory swapping (there is no source world on login).
+- If a restore cannot fully fit (capacity mismatch), leftovers remain in the destination world stash file instead of being dropped.
+
 ## Install
 
 1. Build the jar:
@@ -67,11 +92,23 @@ mvn -DskipTests package
 - If your server assets rename those, update `DEFAULT_FLUID_KEYS` in:
 
 ```
-GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/HydrationTaleSystem.java
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleSystem.java
 ```
 
 - Sleep threshold is configured in:
 
 ```
-GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/SleepyTaleSystem.java
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/SleepyTaleSystem.java
+```
+
+- HydrationTale implementation lives in:
+
+```
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleSystem.java
+```
+
+- IsekaiTale implementation lives in:
+
+```
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/IsekaiTaleSystem.java
 ```
