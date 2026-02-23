@@ -19,6 +19,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
@@ -28,12 +30,7 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
   static final double REQUIRED_SLEEP_FRACTION = 0.1d; // 10% of players
 
   private final HytaleLogger logger;
-  private int lastReadyPlayers = -1;
-  private int lastTotalPlayers = -1;
-  private int lastRequiredPlayers = -1;
-  private boolean lastMinMet;
-  private boolean initialized;
-  private boolean pendingCleanup;
+  private final ConcurrentHashMap<UUID, WorldSleepState> stateByWorld = new ConcurrentHashMap<>();
 
   public SleepyTaleSystem(HytaleLogger logger)
   {
@@ -46,14 +43,12 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
   {
     EntityStore entityStore = (EntityStore) store.getExternalData();
     World world = entityStore.getWorld();
+    UUID worldUuid = world.getWorldConfig().getUuid();
+    WorldSleepState localState = stateByWorld.computeIfAbsent(worldUuid, ignored -> new WorldSleepState());
     Collection<PlayerRef> players = world.getPlayerRefs();
     if (players.isEmpty())
     {
-      lastReadyPlayers = -1;
-      lastTotalPlayers = -1;
-      lastRequiredPlayers = -1;
-      lastMinMet = false;
-      initialized = false;
+      localState.reset();
       return;
     }
 
@@ -64,13 +59,13 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
 
     WorldSomnolence somnolence = store.getResource(WorldSomnolence.getResourceType());
     WorldSleep state = somnolence.getState();
-    if (pendingCleanup && state == com.hypixel.hytale.builtin.beds.sleep.resources.WorldSleep.Awake.INSTANCE)
+    if (localState.pendingCleanup && state == com.hypixel.hytale.builtin.beds.sleep.resources.WorldSleep.Awake.INSTANCE)
     {
       for (PlayerRef player : players)
       {
         store.putComponent(player.getReference(), PlayerSomnolence.getComponentType(), PlayerSomnolence.AWAKE);
       }
-      pendingCleanup = false;
+      localState.pendingCleanup = false;
     }
     if (state != com.hypixel.hytale.builtin.beds.sleep.resources.WorldSleep.Awake.INSTANCE)
     {
@@ -81,30 +76,32 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     int readyPlayers = countReadyPlayers(store, players);
     int requiredPlayers = computeRequiredPlayers(totalPlayers);
     boolean minMet = readyPlayers >= requiredPlayers;
-    if (!initialized)
+    if (!localState.initialized)
     {
-      lastReadyPlayers = readyPlayers;
-      lastTotalPlayers = totalPlayers;
-      lastRequiredPlayers = requiredPlayers;
-      lastMinMet = minMet;
-      initialized = true;
+      localState.lastReadyPlayers = readyPlayers;
+      localState.lastTotalPlayers = totalPlayers;
+      localState.lastRequiredPlayers = requiredPlayers;
+      localState.lastMinMet = minMet;
+      localState.initialized = true;
     }
     boolean firstSleeperAnnouncement = readyPlayers == 1
-        && (readyPlayers != lastReadyPlayers || totalPlayers != lastTotalPlayers || requiredPlayers != lastRequiredPlayers);
+        && (readyPlayers != localState.lastReadyPlayers
+            || totalPlayers != localState.lastTotalPlayers
+            || requiredPlayers != localState.lastRequiredPlayers);
     if (firstSleeperAnnouncement)
     {
       world.sendMessage(Message
           .raw(String.format("SleepyTale: %d/%d players sleeping (%d required to force sleep).", readyPlayers,
               totalPlayers, requiredPlayers)));
     }
-    lastReadyPlayers = readyPlayers;
-    lastTotalPlayers = totalPlayers;
-    lastRequiredPlayers = requiredPlayers;
-    if (minMet && !lastMinMet)
+    localState.lastReadyPlayers = readyPlayers;
+    localState.lastTotalPlayers = totalPlayers;
+    localState.lastRequiredPlayers = requiredPlayers;
+    if (minMet && !localState.lastMinMet)
     {
       world.sendMessage(Message.raw("SleepyTale: The minimum players for sleeping has been met, good night everyone."));
     }
-    lastMinMet = minMet;
+    localState.lastMinMet = minMet;
 
     if (!minMet)
     {
@@ -122,7 +119,7 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
       store.putComponent(player.getReference(), PlayerSomnolence.getComponentType(), Slumber.createComponent(timeResource));
     }
     somnolence.setState(new WorldSlumber(start, target, irlSeconds));
-    pendingCleanup = true;
+    localState.pendingCleanup = true;
 
     logger.at(Level.INFO).log("SleepyTale: slumber started (%d/%d ready, required=%d)", readyPlayers, totalPlayers,
         requiredPlayers);
@@ -170,5 +167,25 @@ public final class SleepyTaleSystem extends DelayedSystem<EntityStore>
     long hours = TimeUnit.MILLISECONDS.toHours(millis);
     double scaled = Math.max(3.0d, (double) hours / 6.0d);
     return (float) Math.ceil(scaled);
+  }
+
+  private static final class WorldSleepState
+  {
+    int lastReadyPlayers = -1;
+    int lastTotalPlayers = -1;
+    int lastRequiredPlayers = -1;
+    boolean lastMinMet;
+    boolean initialized;
+    boolean pendingCleanup;
+
+    void reset()
+    {
+      lastReadyPlayers = -1;
+      lastTotalPlayers = -1;
+      lastRequiredPlayers = -1;
+      lastMinMet = false;
+      initialized = false;
+      pendingCleanup = false;
+    }
   }
 }
