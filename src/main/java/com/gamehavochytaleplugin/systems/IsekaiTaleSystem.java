@@ -6,6 +6,7 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.protocol.GameMode;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.AddPlayerToWorldEvent;
+import com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerReadyEvent;
 import com.hypixel.hytale.server.core.inventory.Inventory;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
@@ -14,6 +15,8 @@ import com.hypixel.hytale.server.core.inventory.transaction.ItemStackTransaction
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.WorldConfig;
+import com.hypixel.hytale.server.core.universe.world.events.AddWorldEvent;
+import com.hypixel.hytale.server.core.universe.world.events.RemoveWorldEvent;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -38,6 +41,7 @@ public final class IsekaiTaleSystem
   private static final String INSTANCE_WORLD_PREFIX = "instance-";
   private static final boolean ENFORCE_WORLD_DEFAULT_GAMEMODE = true;
   private static final int SNAPSHOT_VERSION = 1;
+  private static final long PENDING_TRANSFER_TTL_MS = 30_000L;
   private static final String[] INVENTORY_SECTIONS =
   { "HOTBAR", "STORAGE", "ARMOR", "UTILITY", "TOOLS", "BACKPACK" };
 
@@ -50,6 +54,29 @@ public final class IsekaiTaleSystem
   {
     this.logger = logger;
     this.stashRoot = dataDirectory.resolve("stash");
+  }
+
+  public void onAddWorld(AddWorldEvent event)
+  {
+    if (event == null)
+    {
+      return;
+    }
+    rememberWorld(event.getWorld());
+  }
+
+  public void onRemoveWorld(RemoveWorldEvent event)
+  {
+    if (event == null || event.getWorld() == null)
+    {
+      return;
+    }
+    UUID worldUuid = safeGet(() -> event.getWorld().getWorldConfig().getUuid());
+    if (worldUuid == null)
+    {
+      return;
+    }
+    worldsByUuid.remove(worldUuid);
   }
 
   public void onAddPlayerToWorld(AddPlayerToWorldEvent event)
@@ -96,10 +123,11 @@ public final class IsekaiTaleSystem
       return;
     }
 
-    worldsByUuid.put(destWorldUuid, new WorldIdentity(destWorldUuid, destWorldName, isInstanceWorld(destWorldName)));
+    rememberWorld(destinationWorld);
 
     if (sourceWorldUuid == null)
     {
+      // TODO: Verify how Hytale resolves login when a player's last world has been deleted or is unavailable.
       logFine("IsekaiTale: login/add with no source world for " + playerName + " -> " + destWorldName + ".");
       return;
     }
@@ -125,8 +153,25 @@ public final class IsekaiTaleSystem
       return;
     }
 
-    pendingTransfers.put(playerUuid, new PendingTransfer(playerUuid, playerName, sourceWorld.uuid(), destWorldUuid, destWorldName));
+    discardExpiredPendingTransfer(playerUuid, System.currentTimeMillis());
+    pendingTransfers.put(playerUuid,
+        new PendingTransfer(playerUuid, playerName, sourceWorld.uuid(), sourceWorld.name(), destWorldUuid, destWorldName,
+            System.currentTimeMillis()));
     logFine("IsekaiTale: queued transfer for " + playerName + " (" + sourceWorld.name() + " -> " + destWorldName + ").");
+  }
+
+  public void onPlayerDisconnect(PlayerDisconnectEvent event)
+  {
+    if (event == null || event.getPlayerRef() == null)
+    {
+      return;
+    }
+
+    UUID playerUuid = safeGet(() -> event.getPlayerRef().getUuid());
+    if (playerUuid != null)
+    {
+      pendingTransfers.remove(playerUuid);
+    }
   }
 
   public void onPlayerReady(PlayerReadyEvent event)
@@ -181,7 +226,10 @@ public final class IsekaiTaleSystem
     UUID actualDestWorldUuid = safeGet(() -> destinationWorld.getWorldConfig().getUuid());
     if (actualDestWorldUuid == null || !actualDestWorldUuid.equals(pending.destWorldUuid()))
     {
-      pendingTransfers.put(playerUuid, pending);
+      if (!isPendingTransferExpired(pending, System.currentTimeMillis()))
+      {
+        pendingTransfers.put(playerUuid, pending);
+      }
       return;
     }
 
@@ -202,14 +250,6 @@ public final class IsekaiTaleSystem
     UUID destWorldUuid = pending.destWorldUuid();
     String destWorldName = pending.destWorldName();
 
-    WorldIdentity sourceWorld = worldsByUuid.get(sourceWorldUuid);
-    if (sourceWorld == null)
-    {
-      logWarn("IsekaiTale: unknown source world UUID " + sourceWorldUuid + " for " + playerName
-          + " -> " + destWorldName + "; skipping inventory transfer.");
-      return;
-    }
-
     Inventory inventory = player.getInventory();
     if (inventory == null)
     {
@@ -218,9 +258,9 @@ public final class IsekaiTaleSystem
     }
 
     int sourceStacks = countNonEmptyStacks(inventory);
-    if (!stashInventory(inventory, pending.playerUuid(), sourceWorld.uuid()))
+    if (!stashInventory(inventory, pending.playerUuid(), sourceWorldUuid))
     {
-      logWarn("IsekaiTale: failed to stash inventory for " + playerName + " leaving " + sourceWorld.name()
+      logWarn("IsekaiTale: failed to stash inventory for " + playerName + " leaving " + pending.sourceWorldName()
           + "; inventory left untouched.");
       return;
     }
@@ -234,12 +274,44 @@ public final class IsekaiTaleSystem
 
     RestoreResult restore = restoreInventory(inventory, pending.playerUuid(), destWorldUuid);
     logger.at(Level.INFO).log("IsekaiTale: transfer " + playerName
-        + " " + sourceWorld.name() + " -> " + destWorldName
+        + " " + pending.sourceWorldName() + " -> " + destWorldName
         + " stashedStacks=" + sourceStacks
         + " restoredStacks=" + restore.restoredStacks()
         + " restoredQty=" + restore.restoredQuantity()
         + " leftovers=" + restore.leftoverStacks()
         + " gamemode=" + safeGameModeName(player));
+  }
+
+  private void rememberWorld(World world)
+  {
+    if (world == null)
+    {
+      return;
+    }
+
+    UUID worldUuid = safeGet(() -> world.getWorldConfig().getUuid());
+    String worldName = safeString(world::getName, "unknown");
+    if (worldUuid == null)
+    {
+      return;
+    }
+
+    worldsByUuid.put(worldUuid, new WorldIdentity(worldUuid, worldName, isInstanceWorld(worldName)));
+  }
+
+  private void discardExpiredPendingTransfer(UUID playerUuid, long nowMillis)
+  {
+    PendingTransfer pending = pendingTransfers.get(playerUuid);
+    if (pending == null || !isPendingTransferExpired(pending, nowMillis))
+    {
+      return;
+    }
+    pendingTransfers.remove(playerUuid, pending);
+  }
+
+  private static boolean isPendingTransferExpired(PendingTransfer pending, long nowMillis)
+  {
+    return pending != null && nowMillis - pending.createdAtMillis() > PENDING_TRANSFER_TTL_MS;
   }
 
   private void applyWorldDefaultGameMode(
@@ -538,25 +610,6 @@ public final class IsekaiTaleSystem
     };
   }
 
-  private static List<ItemStack> readItemsFromInventory(Inventory inventory)
-  {
-    ArrayList<ItemStack> items = new ArrayList<>();
-    if (inventory == null)
-    {
-      return items;
-    }
-
-    ItemContainer combined = inventory.getCombinedEverything();
-    combined.forEach((slot, stack) -> {
-      if (stack == null || stack.isEmpty())
-      {
-        return;
-      }
-      items.add(cloneStack(stack));
-    });
-    return items;
-  }
-
   private static List<ItemStack> addItemsToInventory(Inventory inventory, List<ItemStack> items)
   {
     ArrayList<ItemStack> leftovers = new ArrayList<>();
@@ -832,8 +885,8 @@ public final class IsekaiTaleSystem
   {
   }
 
-  private record PendingTransfer(UUID playerUuid, String playerName, UUID sourceWorldUuid, UUID destWorldUuid,
-      String destWorldName)
+  private record PendingTransfer(UUID playerUuid, String playerName, UUID sourceWorldUuid, String sourceWorldName,
+      UUID destWorldUuid, String destWorldName, long createdAtMillis)
   {
   }
 
