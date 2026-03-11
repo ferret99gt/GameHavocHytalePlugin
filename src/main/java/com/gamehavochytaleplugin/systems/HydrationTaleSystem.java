@@ -1,244 +1,214 @@
 package com.gamehavochytaleplugin.systems;
 
+import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.builtin.adventure.farming.states.TilledSoilBlock;
-import com.hypixel.hytale.component.Archetype;
-import com.hypixel.hytale.component.ArchetypeChunk;
-import com.hypixel.hytale.component.CommandBuffer;
-import com.hypixel.hytale.component.ReadWriteQuery;
+import com.hypixel.hytale.component.ComponentType;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
-import com.hypixel.hytale.component.query.Query;
-import com.hypixel.hytale.component.system.tick.EntityTickingSystem;
+import com.hypixel.hytale.component.system.DelayedSystem;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.asset.type.fluid.Fluid;
 import com.hypixel.hytale.server.core.modules.block.BlockModule;
+import com.hypixel.hytale.server.core.modules.block.BlockModule.BlockStateInfo;
 import com.hypixel.hytale.server.core.modules.time.WorldTimeResource;
 import com.hypixel.hytale.server.core.universe.world.World;
-import com.hypixel.hytale.server.core.universe.world.chunk.BlockChunk;
-import com.hypixel.hytale.server.core.universe.world.chunk.BlockComponentChunk;
+import com.hypixel.hytale.server.core.universe.world.events.RemoveWorldEvent;
 import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
-import com.hypixel.hytale.server.core.universe.world.chunk.section.BlockSection;
 import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
-import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
-public final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
+public final class HydrationTaleSystem extends DelayedSystem<EntityStore>
 {
+  static final float CHECK_INTERVAL_SEC = 0.5f;
   static final String[] DEFAULT_FLUID_KEYS =
   { "Water", "Water_Source", "Water_Finite" };
   static final int NOT_FOUND_ID = Integer.MIN_VALUE;
 
   private final HytaleLogger logger;
-  private final Query<ChunkStore> query;
-  private final com.hypixel.hytale.component.ComponentType<ChunkStore, BlockModule.BlockStateInfo> blockStateInfoType;
-  private final com.hypixel.hytale.component.ComponentType<ChunkStore, TilledSoilBlock> tilledSoilType;
+  private final ComponentType<ChunkStore, TilledSoilBlock> tilledSoilType;
+  private final ComponentType<ChunkStore, BlockStateInfo> blockStateInfoType;
   private final BlockTypeAssetMap<String, BlockType> blockTypeMap;
+  private final ConcurrentHashMap<UUID, Set<Ref<ChunkStore>>> soilRefsByWorld;
   private final IntOpenHashSet waterFluidIds = new IntOpenHashSet();
   private boolean waterFluidIdsReady;
-  private final AtomicBoolean tickLogged = new AtomicBoolean(false);
-  private final AtomicBoolean changeLogged = new AtomicBoolean(false);
-  private final AtomicBoolean probeLogged = new AtomicBoolean(false);
-  private float timeAccumulator;
 
-  public HydrationTaleSystem(HytaleLogger logger)
+  public HydrationTaleSystem(HytaleLogger logger, ConcurrentHashMap<UUID, Set<Ref<ChunkStore>>> soilRefsByWorld)
   {
+    super(CHECK_INTERVAL_SEC);
     this.logger = logger;
-    this.blockStateInfoType = BlockModule.get().getBlockStateInfoComponentType();
     this.tilledSoilType = TilledSoilBlock.getComponentType();
+    this.blockStateInfoType = BlockModule.get().getBlockStateInfoComponentType();
     this.blockTypeMap = BlockType.getAssetMap();
-    var archetype = Archetype.of(this.blockStateInfoType, this.tilledSoilType);
-    this.query = new ReadWriteQuery<>(archetype, archetype);
+    this.soilRefsByWorld = soilRefsByWorld;
   }
 
-  @Override
-  public Query<ChunkStore> getQuery()
+  public void onRemoveWorld(RemoveWorldEvent event)
   {
-    return query;
-  }
-
-  @Override
-  public void tick(float delta, int index, ArchetypeChunk<ChunkStore> chunk, Store<ChunkStore> store,
-      CommandBuffer<ChunkStore> commandBuffer)
-  {
-    timeAccumulator += delta;
-    if (timeAccumulator < 0.3f)
+    if (event == null || event.getWorld() == null || event.getWorld().getWorldConfig() == null)
     {
       return;
     }
-    timeAccumulator = 0.0f;
+    soilRefsByWorld.remove(event.getWorld().getWorldConfig().getUuid());
+  }
 
-    if (logger != null && tickLogged.compareAndSet(false, true))
+  @Override
+  public void delayedTick(float delta, int index, Store<EntityStore> store)
+  {
+    EntityStore entityStore = (EntityStore) store.getExternalData();
+    if (entityStore == null)
     {
-      logger.at(Level.FINEST).log("HydrationTale: HydrationTaleSystem ticking.");
+      return;
     }
+
+    World world = entityStore.getWorld();
+    if (world == null)
+    {
+      return;
+    }
+
+    UUID worldUuid = world.getWorldConfig() == null ? null : world.getWorldConfig().getUuid();
+    if (worldUuid == null)
+    {
+      return;
+    }
+
     if (!ensureWaterFluidIds())
     {
       return;
     }
 
-    var blockStateInfo = chunk.getComponent(index, blockStateInfoType);
-    var soil = chunk.getComponent(index, tilledSoilType);
-    if (blockStateInfo == null || soil == null)
+    Instant now = getGameTime(store);
+    if (now == null)
     {
       return;
     }
 
-    Ref<ChunkStore> chunkRef = blockStateInfo.getChunkRef();
-    if (chunkRef == null || !chunkRef.isValid())
+    Set<Ref<ChunkStore>> soilRefs = soilRefsByWorld.get(worldUuid);
+    if (soilRefs == null || soilRefs.isEmpty())
     {
       return;
     }
 
-    BlockChunk blockChunk = commandBuffer.getComponent(chunkRef, BlockChunk.getComponentType());
-    if (blockChunk == null)
+    ChunkStore chunkStore = world.getChunkStore();
+    if (chunkStore == null)
     {
       return;
     }
 
-    BlockComponentChunk blockComponentChunk = commandBuffer.getComponent(chunkRef, BlockComponentChunk.getComponentType());
-    if (blockComponentChunk == null)
+    Store<ChunkStore> chunkStoreStore = chunkStore.getStore();
+    if (chunkStoreStore == null)
     {
       return;
     }
 
-    WorldChunk worldChunk = commandBuffer.getComponent(chunkRef, WorldChunk.getComponentType());
-    if (worldChunk == null)
+    for (Ref<ChunkStore> soilRef : soilRefs)
     {
-      return;
-    }
+      if (soilRef == null || !soilRef.isValid())
+      {
+        soilRefs.remove(soilRef);
+        continue;
+      }
 
-    int blockIndex = blockStateInfo.getIndex();
+      TilledSoilBlock soil = chunkStoreStore.getComponent(soilRef, tilledSoilType);
+      if (soil == null)
+      {
+        soilRefs.remove(soilRef);
+        continue;
+      }
+
+      BlockStateInfo blockStateInfo = chunkStoreStore.getComponent(soilRef, blockStateInfoType);
+      if (blockStateInfo == null)
+      {
+        soilRefs.remove(soilRef);
+        continue;
+      }
+
+      Ref<ChunkStore> chunkRef = blockStateInfo.getChunkRef();
+      if (chunkRef == null || !chunkRef.isValid())
+      {
+        soilRefs.remove(soilRef);
+        continue;
+      }
+
+      WorldChunk worldChunk = chunkStoreStore.getComponent(chunkRef, WorldChunk.getComponentType());
+      if (worldChunk == null)
+      {
+        continue;
+      }
+
+      processSoil(world, worldChunk, chunkStoreStore, blockStateInfo.getIndex(), soil, now);
+    }
+  }
+
+  private void processSoil(World world, WorldChunk worldChunk, Store<ChunkStore> chunkStoreStore, int blockIndex,
+      TilledSoilBlock soil, Instant now)
+  {
     int localX = ChunkUtil.xFromBlockInColumn(blockIndex);
     int localY = ChunkUtil.yFromBlockInColumn(blockIndex);
     int localZ = ChunkUtil.zFromBlockInColumn(blockIndex);
-    int sectionY = localY & ChunkUtil.SIZE_MINUS_1;
     if (localY < 0 || localY >= ChunkUtil.HEIGHT)
     {
       return;
     }
 
-    BlockSection blockSection = blockChunk.getSectionAtBlockY(localY);
-    if (blockSection == null)
-    {
-      return;
-    }
-
-    int worldX = (worldChunk.getX() << ChunkUtil.BITS) + localX;
-    int worldZ = (worldChunk.getZ() << ChunkUtil.BITS) + localZ;
-    int worldY = localY;
-
-    boolean hasWater = hasAdjacentWater(commandBuffer, store.getExternalData(), waterFluidIds, worldChunk, localX, worldY,
-        localZ, worldX, worldZ);
-    if (logger != null && probeLogged.compareAndSet(false, true))
-    {
-      int westId = getFluidIdAt(commandBuffer, store.getExternalData(), worldX - 1, worldY, worldZ);
-      int eastId = getFluidIdAt(commandBuffer, store.getExternalData(), worldX + 1, worldY, worldZ);
-      int northId = getFluidIdAt(commandBuffer, store.getExternalData(), worldX, worldY, worldZ - 1);
-      int southId = getFluidIdAt(commandBuffer, store.getExternalData(), worldX, worldY, worldZ + 1);
-      int soilId = worldChunk.getBlock(localX, worldY, localZ);
-      BlockType soilType = blockTypeMap.getAsset(soilId);
-      String soilKey = soilType == null ? "null" : soilType.getId();
-      int altWorldX = (worldChunk.getX() << ChunkUtil.BITS) + localX;
-      int altWorldZ = (worldChunk.getZ() << ChunkUtil.BITS) + localZ;
-      logger.at(Level.FINEST).log("HydrationTale: probe at %d,%d,%d water=%s ids=[W:%d E:%d N:%d S:%d] waterIds=%s", worldX,
-          worldY, worldZ, hasWater, westId, eastId, northId, southId, waterFluidIds);
-      logger.at(Level.FINEST).log("HydrationTale: probe coords chunkX=%d chunkZ=%d local=%d,%d altWorld=%d,%d soil=%s(%d)",
-          worldChunk.getX(), worldChunk.getZ(), localX, localZ, altWorldX, altWorldZ, soilKey, soilId);
-      logNeighborDetail(commandBuffer, store.getExternalData(), worldX, worldY, worldZ - 1, "N");
-    }
-    TilledSoilBlock liveSoil = soil;
-    Ref<ChunkStore> soilRef = blockComponentChunk.getEntityReference(blockIndex);
-    if (soilRef != null && soilRef.isValid())
-    {
-      TilledSoilBlock entitySoil = commandBuffer.getComponent(soilRef, tilledSoilType);
-      if (entitySoil != null)
-      {
-        liveSoil = entitySoil;
-      }
-    }
-
-    boolean previousExternalWater = liveSoil.hasExternalWater();
+    boolean hasWater = hasAdjacentWater(world, worldChunk, localX, localY, localZ);
+    boolean previousExternalWater = soil.hasExternalWater();
     if (previousExternalWater != hasWater)
     {
-      liveSoil.setExternalWater(hasWater);
-      blockSection.setTicking(localX, sectionY, localZ, true);
-      if (logger != null && changeLogged.compareAndSet(false, true))
-      {
-        logger.at(Level.FINEST).log("HydrationTale: first externalWater change -> %s.", hasWater);
-      }
+      soil.setExternalWater(hasWater);
+      worldChunk.setTicking(localX, localY, localZ, true);
     }
 
-    int currentBlockId = worldChunk.getBlock(localX, worldY, localZ);
+    int currentBlockId = worldChunk.getBlock(localX, localY, localZ);
     BlockType currentBlockType = blockTypeMap.getAsset(currentBlockId);
     if (currentBlockType == null)
     {
       return;
     }
-    Instant now = getGameTime(worldChunk.getWorld());
-    if (now == null)
+
+    String nextBlockKey = soil.computeBlockType(now, currentBlockType);
+    if (nextBlockKey == null)
     {
       return;
     }
-    String nextBlockKey = liveSoil.computeBlockType(now, currentBlockType);
-    if (nextBlockKey == null || nextBlockKey.equals(currentBlockType.getId()))
+
+    if (nextBlockKey.equals(currentBlockType.getId()))
     {
+      if (previousExternalWater != hasWater)
+      {
+        applySoilComponent(chunkStoreStore, worldChunk, blockIndex, localX, localY, localZ, soil);
+        logger.at(Level.FINEST).log("HydrationTale: state change at %d,%d,%d water=%s id=%d key=%s", toWorldX(worldChunk, localX),
+            localY, toWorldZ(worldChunk, localZ), hasWater, currentBlockId, currentBlockType.getId());
+      }
       return;
     }
+
     int nextBlockId = blockTypeMap.getIndex(nextBlockKey);
     if (nextBlockId == Integer.MIN_VALUE)
     {
       return;
     }
 
-    boolean blockStateChange = (nextBlockId != currentBlockId);
-    if (blockStateChange)
+    BlockType nextBlockType = blockTypeMap.getAsset(nextBlockId);
+    if (nextBlockType == null)
     {
-      BlockType nextBlockType = blockTypeMap.getAsset(nextBlockId);
-      if (nextBlockType == null)
-      {
-        return;
-      }
-      final TilledSoilBlock soilForUpdate = liveSoil;
-      int rotationIndex = blockSection.getRotationIndex(localX, sectionY, localZ);
-      commandBuffer.run(chunkUpdate ->
-      {
-        WorldChunk targetChunk = chunkUpdate.getComponent(chunkRef, WorldChunk.getComponentType());
-        if (targetChunk != null)
-        {
-          targetChunk.setBlock(localX, worldY, localZ, nextBlockId, nextBlockType, rotationIndex, 0, 0);
-          BlockComponentChunk targetBlockComponentChunk = targetChunk.getBlockComponentChunk();
-          if (targetBlockComponentChunk != null)
-          {
-            applySoilComponent(chunkUpdate, targetChunk, targetBlockComponentChunk, blockIndex, localX, worldY, localZ,
-                soilForUpdate);
-          }
-        }
-      });
-      logger.at(Level.FINEST).log("HydrationTale: block/state change at %d,%d,%d water=%s id %d->%d key %s->%s", worldX, worldY,
-          worldZ, hasWater, currentBlockId, nextBlockId, currentBlockType.getId(), nextBlockKey);
-    }
-    else if (previousExternalWater != hasWater)
-    {
-      applySoilComponent(commandBuffer, worldChunk, blockComponentChunk, blockIndex, localX, worldY, localZ, liveSoil);
-      logger.at(Level.FINEST).log("HydrationTale: state change at %d,%d,%d water=%s id=%d key=%s computed=%s", worldX,
-          worldY, worldZ, hasWater, currentBlockId, currentBlockType.getId(), nextBlockKey);
+      return;
     }
 
-    /*
-    if (blockStateChange || previousExternalWater != hasWater)
-    {
-      chunk.setComponent(index, tilledSoilType, liveSoil);
-      if (previousExternalWater != hasWater)
-      {
-        applySoilComponent(commandBuffer, worldChunk, blockComponentChunk, blockIndex, localX, worldY, localZ, liveSoil);
-      }
-    }
-    */
+    int rotationIndex = worldChunk.getRotationIndex(localX, localY, localZ);
+    worldChunk.setBlock(localX, localY, localZ, nextBlockId, nextBlockType, rotationIndex, 0, 0);
+    applySoilComponent(chunkStoreStore, worldChunk, blockIndex, localX, localY, localZ, soil);
+    logger.at(Level.FINEST).log("HydrationTale: block/state change at %d,%d,%d water=%s id %d->%d key %s->%s",
+        toWorldX(worldChunk, localX), localY, toWorldZ(worldChunk, localZ), hasWater, currentBlockId, nextBlockId,
+        currentBlockType.getId(), nextBlockKey);
   }
 
   private boolean ensureWaterFluidIds()
@@ -247,6 +217,7 @@ public final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
     {
       return true;
     }
+
     var map = Fluid.getAssetMap();
     waterFluidIds.clear();
     for (String key : DEFAULT_FLUID_KEYS)
@@ -254,7 +225,7 @@ public final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
       int fluidId = map.getIndexOrDefault(key, Fluid.UNKNOWN_ID);
       if (fluidId == Fluid.UNKNOWN_ID)
       {
-        logger.at(Level.WARNING).log("GameHavocHyTaleMods: fluid '%s' not found.", key);
+        logger.at(Level.WARNING).log("HydrationTale: fluid '%s' not found.", key);
         continue;
       }
       waterFluidIds.add(fluidId);
@@ -263,179 +234,91 @@ public final class HydrationTaleSystem extends EntityTickingSystem<ChunkStore>
     return waterFluidIdsReady;
   }
 
-  private static boolean hasAdjacentWater(CommandBuffer<ChunkStore> commandBuffer, ChunkStore chunkStore,
-      IntOpenHashSet waterIds, WorldChunk worldChunk, int localX, int worldY, int localZ, int worldX, int worldZ)
+  private boolean hasAdjacentWater(World world, WorldChunk worldChunk, int localX, int worldY, int localZ)
   {
-    if (worldChunk != null)
+    if (localX > 0 && waterFluidIds.contains(worldChunk.getFluidId(localX - 1, worldY, localZ)))
     {
-      if (localX > 0)
-      {
-        int fluidId = worldChunk.getFluidId(localX - 1, worldY, localZ);
-        if (waterIds.contains(fluidId))
-        {
-          return true;
-        }
-      }
-      if (localX < ChunkUtil.SIZE_MINUS_1)
-      {
-        int fluidId = worldChunk.getFluidId(localX + 1, worldY, localZ);
-        if (waterIds.contains(fluidId))
-        {
-          return true;
-        }
-      }
-      if (localZ > 0)
-      {
-        int fluidId = worldChunk.getFluidId(localX, worldY, localZ - 1);
-        if (waterIds.contains(fluidId))
-        {
-          return true;
-        }
-      }
-      if (localZ < ChunkUtil.SIZE_MINUS_1)
-      {
-        int fluidId = worldChunk.getFluidId(localX, worldY, localZ + 1);
-        if (waterIds.contains(fluidId))
-        {
-          return true;
-        }
-      }
-
-      if (localX == 0 && isWaterAt(commandBuffer, chunkStore, waterIds, worldX - 1, worldY, worldZ))
-      {
-        return true;
-      }
-      if (localX == ChunkUtil.SIZE_MINUS_1 && isWaterAt(commandBuffer, chunkStore, waterIds, worldX + 1, worldY, worldZ))
-      {
-        return true;
-      }
-      if (localZ == 0 && isWaterAt(commandBuffer, chunkStore, waterIds, worldX, worldY, worldZ - 1))
-      {
-        return true;
-      }
-      if (localZ == ChunkUtil.SIZE_MINUS_1 && isWaterAt(commandBuffer, chunkStore, waterIds, worldX, worldY, worldZ + 1))
-      {
-        return true;
-      }
-
-      return false;
+      return true;
+    }
+    if (localX < ChunkUtil.SIZE_MINUS_1 && waterFluidIds.contains(worldChunk.getFluidId(localX + 1, worldY, localZ)))
+    {
+      return true;
+    }
+    if (localZ > 0 && waterFluidIds.contains(worldChunk.getFluidId(localX, worldY, localZ - 1)))
+    {
+      return true;
+    }
+    if (localZ < ChunkUtil.SIZE_MINUS_1 && waterFluidIds.contains(worldChunk.getFluidId(localX, worldY, localZ + 1)))
+    {
+      return true;
     }
 
-    return isWaterAt(commandBuffer, chunkStore, waterIds, worldX - 1, worldY, worldZ)
-        || isWaterAt(commandBuffer, chunkStore, waterIds, worldX + 1, worldY, worldZ)
-        || isWaterAt(commandBuffer, chunkStore, waterIds, worldX, worldY, worldZ - 1)
-        || isWaterAt(commandBuffer, chunkStore, waterIds, worldX, worldY, worldZ + 1);
+    int worldX = toWorldX(worldChunk, localX);
+    int worldZ = toWorldZ(worldChunk, localZ);
+    if (localX == 0 && isWaterAt(world, worldX - 1, worldY, worldZ))
+    {
+      return true;
+    }
+    if (localX == ChunkUtil.SIZE_MINUS_1 && isWaterAt(world, worldX + 1, worldY, worldZ))
+    {
+      return true;
+    }
+    if (localZ == 0 && isWaterAt(world, worldX, worldY, worldZ - 1))
+    {
+      return true;
+    }
+    return localZ == ChunkUtil.SIZE_MINUS_1 && isWaterAt(world, worldX, worldY, worldZ + 1);
   }
 
-  private static boolean isWaterAt(CommandBuffer<ChunkStore> commandBuffer, ChunkStore chunkStore, IntOpenHashSet waterIds,
-      int worldX, int worldY, int worldZ)
+  private boolean isWaterAt(World world, int worldX, int worldY, int worldZ)
   {
-    int fluidId = getFluidIdAt(commandBuffer, chunkStore, worldX, worldY, worldZ);
-    return waterIds.contains(fluidId);
+    int fluidId = getFluidIdAt(world, worldX, worldY, worldZ);
+    return waterFluidIds.contains(fluidId);
   }
 
-  private static int getFluidIdAt(CommandBuffer<ChunkStore> commandBuffer, ChunkStore chunkStore, int worldX, int worldY,
-      int worldZ)
+  private static int getFluidIdAt(World world, int worldX, int worldY, int worldZ)
   {
-    if (chunkStore == null || worldY < 0 || worldY >= ChunkUtil.HEIGHT)
+    if (world == null || worldY < 0 || worldY >= ChunkUtil.HEIGHT)
     {
       return NOT_FOUND_ID;
     }
-    int chunkX = ChunkUtil.chunkCoordinate(worldX);
-    int chunkZ = ChunkUtil.chunkCoordinate(worldZ);
-    long chunkIndex = ChunkUtil.indexChunk(chunkX, chunkZ);
-    Ref<ChunkStore> chunkRef = chunkStore.getChunkReference(chunkIndex);
-    if (chunkRef == null || !chunkRef.isValid())
-    {
-      return NOT_FOUND_ID;
-    }
-    WorldChunk chunk = commandBuffer.getComponent(chunkRef, WorldChunk.getComponentType());
+
+    long chunkIndex = ChunkUtil.indexChunk(ChunkUtil.chunkCoordinate(worldX), ChunkUtil.chunkCoordinate(worldZ));
+    WorldChunk chunk = world.getChunkIfLoaded(chunkIndex);
     if (chunk == null)
     {
       return NOT_FOUND_ID;
     }
+
     int localX = ChunkUtil.localCoordinate((long) worldX);
     int localZ = ChunkUtil.localCoordinate((long) worldZ);
     return chunk.getFluidId(localX, worldY, localZ);
   }
 
-  private void logNeighborDetail(CommandBuffer<ChunkStore> commandBuffer, ChunkStore chunkStore, int worldX, int worldY,
-      int worldZ, String label)
+  private void applySoilComponent(Store<ChunkStore> store, WorldChunk worldChunk, int blockIndex, int localX, int worldY,
+      int localZ, TilledSoilBlock soil)
   {
-    if (logger == null || chunkStore == null)
-    {
-      return;
-    }
-    logBlockFluidAt(commandBuffer, chunkStore, worldX, worldY, worldZ, label);
-    logBlockFluidAt(commandBuffer, chunkStore, worldX, worldY + 1, worldZ, label + "+Y");
-    logBlockFluidAt(commandBuffer, chunkStore, worldX, worldY - 1, worldZ, label + "-Y");
-  }
-
-  private void logBlockFluidAt(CommandBuffer<ChunkStore> commandBuffer, ChunkStore chunkStore, int worldX, int worldY,
-      int worldZ, String label)
-  {
-    if (worldY < 0 || worldY >= ChunkUtil.HEIGHT)
-    {
-      logger.at(Level.FINEST).log("HydrationTale: %s detail at %d,%d,%d -> out of range", label, worldX, worldY, worldZ);
-      return;
-    }
-    int chunkX = ChunkUtil.chunkCoordinate(worldX);
-    int chunkZ = ChunkUtil.chunkCoordinate(worldZ);
-    long chunkIndex = ChunkUtil.indexChunk(chunkX, chunkZ);
-    Ref<ChunkStore> chunkRef = chunkStore.getChunkReference(chunkIndex);
-    if (chunkRef == null || !chunkRef.isValid())
-    {
-      logger.at(Level.FINEST).log("HydrationTale: %s detail at %d,%d,%d -> no chunk", label, worldX, worldY, worldZ);
-      return;
-    }
-    WorldChunk chunk = commandBuffer.getComponent(chunkRef, WorldChunk.getComponentType());
-    if (chunk == null)
-    {
-      logger.at(Level.FINEST).log("HydrationTale: %s detail at %d,%d,%d -> no WorldChunk", label, worldX, worldY, worldZ);
-      return;
-    }
-    int localX = ChunkUtil.localCoordinate((long) worldX);
-    int localZ = ChunkUtil.localCoordinate((long) worldZ);
-    int fluidId = chunk.getFluidId(localX, worldY, localZ);
-    byte fluidLevel = chunk.getFluidLevel(localX, worldY, localZ);
-    int blockId = chunk.getBlock(localX, worldY, localZ);
-    BlockType blockType = blockTypeMap.getAsset(blockId);
-    String blockKey = blockType == null ? "null" : blockType.getId();
-    logger.at(Level.FINEST).log("HydrationTale: %s detail at %d,%d,%d blockId=%d blockKey=%s fluidId=%d fluidLevel=%d", label,
-        worldX, worldY, worldZ, blockId, blockKey, fluidId, fluidLevel);
-  }
-
-  private void applySoilComponent(CommandBuffer<ChunkStore> commandBuffer, WorldChunk worldChunk,
-      BlockComponentChunk blockComponentChunk, int blockIndex, int localX, int worldY, int localZ, TilledSoilBlock soil)
-  {
-    Ref<ChunkStore> entityRef = blockComponentChunk.getEntityReference(blockIndex);
+    Ref<ChunkStore> entityRef = BlockModule.ensureBlockEntity(worldChunk, localX, worldY, localZ);
     if (entityRef == null || !entityRef.isValid())
     {
-      entityRef = BlockModule.ensureBlockEntity(worldChunk, localX, worldY, localZ);
+      return;
     }
-    if (entityRef != null && entityRef.isValid())
-    {
-      commandBuffer.putComponent(entityRef, tilledSoilType, soil);
-    }
+    store.putComponent(entityRef, tilledSoilType, soil);
   }
 
-  private void applySoilComponent(Store<ChunkStore> store, WorldChunk worldChunk, BlockComponentChunk blockComponentChunk,
-      int blockIndex, int localX, int worldY, int localZ, TilledSoilBlock soil)
+  private static int toWorldX(WorldChunk worldChunk, int localX)
   {
-    Ref<ChunkStore> entityRef = blockComponentChunk.getEntityReference(blockIndex);
-    if (entityRef == null || !entityRef.isValid())
-    {
-      entityRef = BlockModule.ensureBlockEntity(worldChunk, localX, worldY, localZ);
-    }
-    if (entityRef != null && entityRef.isValid())
-    {
-      store.putComponent(entityRef, tilledSoilType, soil);
-    }
+    return (worldChunk.getX() << ChunkUtil.BITS) + localX;
   }
 
-  private Instant getGameTime(World world)
+  private static int toWorldZ(WorldChunk worldChunk, int localZ)
   {
-    WorldTimeResource timeResource = world.getEntityStore().getStore().getResource(WorldTimeResource.getResourceType());
+    return (worldChunk.getZ() << ChunkUtil.BITS) + localZ;
+  }
+
+  private static Instant getGameTime(Store<EntityStore> store)
+  {
+    WorldTimeResource timeResource = store.getResource(WorldTimeResource.getResourceType());
     if (timeResource == null)
     {
       return null;

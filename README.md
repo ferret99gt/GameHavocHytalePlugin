@@ -32,13 +32,16 @@ crop growth.
 
 #### How it works (high level)
 
-The mod runs a lightweight tick system for `TilledSoilBlock` and:
+The module keeps a live cache of `TilledSoilBlock` refs and runs a delayed per-world reconciliation pass.
 
-1. Looks up the four orthogonal neighbor fluid IDs.
-2. Sets `externalWater` accordingly.
-3. Forces the block state to update if needed.
+On each pass it:
 
-This mirrors the built-in water check, but it runs independently of crop growth.
+1. Checks cached tilled soil blocks in that world.
+2. Looks up the four orthogonal neighbor fluid IDs.
+3. Sets `externalWater` accordingly.
+4. Forces the block state to update if needed.
+
+This mirrors the built-in water check, but it runs independently of crop growth and without scanning whole chunks.
 
 ### SleepyTale
 
@@ -95,6 +98,12 @@ mvn -DskipTests package
 GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleSystem.java
 ```
 
+- HydrationTale check interval is configured in:
+
+```
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleSystem.java
+```
+
 - Sleep threshold is configured in:
 
 ```
@@ -105,6 +114,12 @@ GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/SleepyTale
 
 ```
 GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleSystem.java
+```
+
+- HydrationTale cache tracking lives in:
+
+```
+GameHavocHytalePlugin/src/main/java/com/gamehavochytaleplugin/systems/HydrationTaleTrackerSystem.java
 ```
 
 - IsekaiTale implementation lives in:
