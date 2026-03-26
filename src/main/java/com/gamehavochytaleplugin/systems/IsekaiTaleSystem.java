@@ -10,6 +10,7 @@ import com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerReadyEvent;
 import com.hypixel.hytale.server.core.inventory.Inventory;
 import com.hypixel.hytale.server.core.inventory.ItemStack;
+import com.hypixel.hytale.server.core.inventory.container.CombinedItemContainer;
 import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
 import com.hypixel.hytale.server.core.inventory.transaction.ItemStackTransaction;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
@@ -618,7 +619,7 @@ public final class IsekaiTaleSystem
       return leftovers;
     }
 
-    ItemContainer combined = inventory.getCombinedEverything();
+    ItemContainer combined = getFallbackInsertionContainer(inventory);
     for (ItemStack stack : items)
     {
       if (stack == null || stack.isEmpty())
@@ -799,12 +800,12 @@ public final class IsekaiTaleSystem
     int[] count = new int[1];
     try
     {
-      inventory.getCombinedEverything().forEach((slot, stack) -> {
+      forEachInventorySection(inventory, section -> section.forEach((slot, stack) -> {
         if (stack != null && !stack.isEmpty())
         {
           count[0]++;
         }
-      });
+      }));
     }
     catch (Throwable ignored)
     {
@@ -827,6 +828,35 @@ public final class IsekaiTaleSystem
       }
     }
     return qty;
+  }
+
+  private static ItemContainer getFallbackInsertionContainer(Inventory inventory)
+  {
+    if (inventory == null)
+    {
+      return null;
+    }
+    return new CombinedItemContainer(
+        inventory.getBackpack(),
+        inventory.getStorage(),
+        inventory.getHotbar(),
+        inventory.getUtility(),
+        inventory.getTools());
+  }
+
+  private static void forEachInventorySection(Inventory inventory, java.util.function.Consumer<ItemContainer> consumer)
+  {
+    if (inventory == null || consumer == null)
+    {
+      return;
+    }
+
+    consumer.accept(inventory.getHotbar());
+    consumer.accept(inventory.getStorage());
+    consumer.accept(inventory.getArmor());
+    consumer.accept(inventory.getUtility());
+    consumer.accept(inventory.getTools());
+    consumer.accept(inventory.getBackpack());
   }
 
   private static boolean isInstanceWorld(String worldName)
