@@ -73,6 +73,25 @@ This is intended for setups like:
 - Login does not trigger inventory swapping (there is no source world on login).
 - If a restore cannot fully fit (capacity mismatch), leftovers remain in the destination world stash file instead of being dropped.
 
+### Asset Overrides
+
+The plugin also ships a small asset-pack override for base-game teleporter limits.
+
+#### Teleporter memories progression
+
+By default, Hytale caps teleporters globally per world. This plugin raises the late-game caps to make multiplayer worlds less restrictive:
+
+- Memory level 4: `10` teleporters
+- Memory level 5: `100` teleporters
+
+The override lives in:
+
+`GameHavocHytalePlugin/src/main/resources/Server/Item/Interactions/Block/Teleporter/Teleporter_Place.json`
+
+The matching player-facing reward text override lives in:
+
+`GameHavocHytalePlugin/src/main/resources/Server/Languages/en-US/GameHavocHytalePlugin.lang`
+
 ## Install
 
 1. Build the jar:

@@ -3,5 +3,6 @@
   "Name": "GameHavocHytalePlugin",
   "Version": "0.1.0",
   "Main": "com.gamehavochytaleplugin.GameHavocHytalePlugin",
-  "ServerVersion": "2026.03.26-89796e57b"
+  "ServerVersion": "2026.03.26-89796e57b",
+  "IncludesAssetPack": true
 }
