@@ -1,2 +1,3 @@
 memories.general.chestActive.level4.rewards = \nCan craft the following:\n• Ancient Gateway (Arcanist's Workbench)\n• Portal Fragments (Arcanist's Workbench)\n• Backpack Upgrade II (Workbench)\n• +3 Decorative Chests (Furniture Workbench)\n• +2 Eternal Seeds (Farmer's Workbench)\n\n+6 Maximum Teleporters\n\nWork in Progress
 memories.general.chestActive.level5.rewards = \nCan craft the following:\n• Harvest Trophy (Farmer's Workbench)\n• +2 Decorative Chests (Furniture Workbench)\n• +2 Eternal Seeds (Farmer's Workbench)\n\n+90 Maximum Teleporters\n\nWork in Progress
+items.Deco_Trophy_Harvest_Leaf.name = Harvest Trophy (Leaf Version)

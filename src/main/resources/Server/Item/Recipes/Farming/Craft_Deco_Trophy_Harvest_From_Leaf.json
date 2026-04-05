@@ -1,0 +1,30 @@
+{
+  "Input": [
+    {
+      "ItemId": "Deco_Trophy_Harvest_Leaf",
+      "Quantity": 1
+    }
+  ],
+  "PrimaryOutput": {
+    "ItemId": "Deco_Trophy_Harvest",
+    "Quantity": 1
+  },
+  "Output": [
+    {
+      "ItemId": "Deco_Trophy_Harvest",
+      "Quantity": 1
+    }
+  ],
+  "BenchRequirement": [
+    {
+      "Type": "Crafting",
+      "Id": "Farmingbench",
+      "Categories": [
+        "Farming"
+      ],
+      "RequiredTierLevel": 8
+    }
+  ],
+  "RequiredMemoriesLevel": 6,
+  "TimeSeconds": 1
+}

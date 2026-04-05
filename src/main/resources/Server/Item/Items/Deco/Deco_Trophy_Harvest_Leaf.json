@@ -1,0 +1,154 @@
+{
+  "TranslationProperties": {
+    "Name": "GameHavocHytalePlugin.items.Deco_Trophy_Harvest_Leaf.name",
+    "Description": "server.items.Deco_Trophy_Harvest.description"
+  },
+  "Icon": "Icons/ItemsGenerated/Deco_Orbis_Trophy.png",
+  "Categories": [
+    "Blocks.Deco"
+  ],
+  "Interactions": {
+    "Primary": "Block_Primary",
+    "Secondary": "Block_Secondary"
+  },
+  "BlockType": {
+    "Material": "Solid",
+    "DrawType": "Model",
+    "Opacity": "Transparent",
+    "CustomModel": "Blocks/Miscellaneous/Kweebec_Plush.blockymodel",
+    "CustomModelTexture": [
+      {
+        "Texture": "Blocks/Miscellaneous/Kweebec_Plush_Pink_Texture.png",
+        "Weight": 1
+      }
+    ],
+    "CustomModelScale": 0.85,
+    "Group": "Wood",
+    "HitboxType": "Plant_Large",
+    "VariantRotation": "NESW",
+    "Flags": {},
+    "Gathering": {
+      "Breaking": {
+        "GatherType": "Woods"
+      }
+    },
+    "BlockParticleSetId": "Leaves",
+    "ParticleColor": "#228b22",
+    "BlockSoundSetId": "Plushie",
+    "Interactions": {
+      "Use": {
+        "Interactions": [
+          {
+            "Type": "ChangeState",
+            "Changes": {
+              "default": "Off",
+              "On": "Off",
+              "Off": "On"
+            },
+            "Effects": {
+              "LocalSoundEventId": "SFX_Plushie_Build"
+            }
+          }
+        ]
+      }
+    },
+    "InteractionHint": "server.interactionHints.deactivate",
+    "State": {
+      "Definitions": {
+        "On": {
+          "Particles": [
+            {
+              "SystemId": "ForgottenTemple_Leaves",
+              "PositionOffset": {
+                "Y": 8.0
+              }
+            },
+            {
+              "SystemId": "MemoryUnlock",
+              "Scale": 0.25
+            }
+          ]
+        },
+        "Off": {
+          "InteractionHint": "server.interactionHints.activate",
+          "Particles": [],
+          "Interactions": {
+            "Use": {
+              "Interactions": [
+                {
+                  "Type": "ChangeState",
+                  "Changes": {
+                    "Off": "On"
+                  },
+                  "Effects": {
+                    "LocalSoundEventId": "SFX_Memories_Unlock_Local"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "Support": {
+      "Down": [
+        {
+          "FaceType": "Full"
+        }
+      ],
+      "Up": [
+        {
+          "FaceType": "Full"
+        }
+      ],
+      "East": [
+        {
+          "FaceType": "Full"
+        }
+      ],
+      "West": [
+        {
+          "FaceType": "Full"
+        }
+      ]
+    },
+    "Particles": [
+      {
+        "SystemId": "ForgottenTemple_Leaves",
+        "PositionOffset": {
+          "Y": 8.0
+        }
+      },
+      {
+        "SystemId": "MemoryUnlock",
+        "Scale": 0.25
+      }
+    ]
+  },
+  "PlayerAnimationsId": "Block",
+  "Model": "Blocks/Miscellaneous/Kweebec_Plush.blockymodel",
+  "Texture": "Blocks/Miscellaneous/Kweebec_Plush_Texture.png",
+  "IconProperties": {
+    "Scale": 0.685,
+    "Rotation": [
+      22.5,
+      45,
+      22.5
+    ],
+    "Translation": [
+      -1.7,
+      -13.1
+    ]
+  },
+  "Tags": {
+    "Type": [
+      "Deco"
+    ],
+    "Family": [
+      "Kweebec"
+    ]
+  },
+  "ItemSoundSetId": "ISS_Blocks_Wood",
+  "Quality": "Legendary",
+  "ItemLevel": 22
+}

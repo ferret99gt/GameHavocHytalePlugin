@@ -77,6 +77,10 @@ This is intended for setups like:
 
 The plugin also ships a small asset-pack override for base-game teleporter limits.
 
+It also adds Adventure recipes for the otherwise-unobtainable `Armor_Diving_Crude_*` set.
+
+It also adds a duplicate harvest trophy variant that restores the older falling-leaves particle effect.
+
 #### Teleporter memories progression
 
 By default, Hytale caps teleporters globally per world. This plugin raises the late-game caps to make multiplayer worlds less restrictive:
@@ -91,6 +95,32 @@ The override lives in:
 The matching player-facing reward text override lives in:
 
 `GameHavocHytalePlugin/src/main/resources/Server/Languages/en-US/GameHavocHytalePlugin.lang`
+
+#### Crude diving armor recipes
+
+The plugin adds Armor Bench tier 2 recipes for:
+
+- `Armor_Diving_Crude_Head`
+- `Armor_Diving_Crude_Chest`
+- `Armor_Diving_Crude_Hands`
+- `Armor_Diving_Crude_Legs`
+
+The recipes are intentionally hybrid:
+
+- copper + iron bars
+- medium + heavy leather
+
+This keeps the set out of early progression while still matching its copper-and-leather appearance.
+
+#### Harvest Trophy leaf variant
+
+The plugin adds:
+
+- `Deco_Trophy_Harvest_Leaf`
+- a Farmer's Workbench conversion recipe from stock `Deco_Trophy_Harvest` -> `Deco_Trophy_Harvest_Leaf`
+- a reverse Farmer's Workbench conversion recipe from `Deco_Trophy_Harvest_Leaf` -> stock `Deco_Trophy_Harvest`
+
+The leaf variant keeps the current trophy's model and icon, but swaps the butterflies back to the older falling-leaves particle effect.
 
 ## Install
 
