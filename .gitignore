@@ -1,3 +1,4 @@
 target/
 lib/HytaleServer.jar
 /_hytale_extract
+/tmp
